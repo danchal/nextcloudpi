@@ -34,10 +34,14 @@ archive="{hostname}-{now:%Y-%m-%dT%H:%M:%S}"
 dbbackup=nextcloud-sqlbkp_$( date +"%Y%m%d" ).bak
 occ="sudo -u www-data php /var/www/nextcloud/occ"
 
+[[ -f /.docker-image ]] && basedir=/data || basedir=/var/www
+
 datadir=$( $occ config:system:get datadirectory ) || {
   echo "Error reading data directory. Is NextCloud running and configured?";
   exit 1;
 }
+
+ncpdir="/usr/local/etc/ncp-config.d"
 
 cleanup(){ local ret=$?;                    rm -f "${dbbackup}" ; $occ maintenance:mode --off; exit $ret; }
 fail()   { local ret=$?; echo "Abort..."  ; rm -f "${dbbackup}" ; $occ maintenance:mode --off; exit $ret; }
@@ -70,19 +74,22 @@ borg prune \
 
 # database
 $occ maintenance:mode --on
-cd "$datadir" || exit 1
+cd "$basedir" || exit 1
 echo "backup database..."
 mysqldump -u root --single-transaction nextcloud > "$dbbackup"
 
 # files
 echo "creating backup..."
 borg create \
-  --exclude ".opcache" \
-  --exclude "{access,error,nextcloud}.log" \
-  --exclude "access.log" \
-  --exclude "appdata_*/previews/*" \
-  --exclude "ncp-update-backups/" \
+  --exclude "${basedir}/database" \
+  --exclude "${datadir}/.opcache" \
+  --exclude "${datadir}/{access,error,nextcloud}.log" \
+  --exclude "${datadir}/access.log" \
+  --exclude "${datadir}/appdata_*/previews/*" \
+  --exclude "${datadir}/ncp-update-backups/" \
   "${destdir}/${repository}::${archive}" \
+  "${basedir}" \
+  "${ncpdir}" \
   "${datadir}" \
   || {
         echo "error creating borgbackup"
@@ -105,7 +112,7 @@ if [[ "$checkrepo" == "yes" ]]; then
   }
 fi
 
-echo "borgbackup ${destdir}::${repository} generated"
+echo "borgbackup ${destdir}/${repository} generated"
 EOF
   chmod +x /usr/local/bin/ncp-borgbackup
 }
