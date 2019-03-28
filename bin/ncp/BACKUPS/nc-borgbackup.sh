@@ -1,6 +1,11 @@
 #!/bin/bash
 # Nextcloud borgbackups
 #
+# Copyleft 2017 by Ignacio Nunez Hernanz <nacho _a_t_ ownyourbits _d_o_t_ com>
+# GPL licensed (see end of file) * Use at your own risk!
+#
+# More at https://ownyourbits.com/2017/02/13/nextcloud-ready-raspberry-pi-image/
+#
 
 install()
 {
@@ -28,7 +33,11 @@ prunecmd="--keep-daily=7 --keep-weekly=4 --keep-monthly=-1"
 archive="{hostname}-{now:%Y-%m-%dT%H:%M:%S}"
 dbbackup=nextcloud-sqlbkp_$( date +"%Y%m%d" ).bak
 occ="sudo -u www-data php /var/www/nextcloud/occ"
-[[ -f /.docker-image ]] && basedir=/data || basedir=/var/www
+
+datadir=$( $occ config:system:get datadirectory ) || {
+  echo "Error reading data directory. Is NextCloud running and configured?";
+  exit 1;
+}
 
 cleanup(){ local ret=$?;                    rm -f "${dbbackup}" ; $occ maintenance:mode --off; exit $ret; }
 fail()   { local ret=$?; echo "Abort..."  ; rm -f "${dbbackup}" ; $occ maintenance:mode --off; exit $ret; }
@@ -61,20 +70,20 @@ borg prune \
 
 # database
 $occ maintenance:mode --on
-cd "$basedir" || exit 1
+cd "$datadir" || exit 1
 echo "backup database..."
 mysqldump -u root --single-transaction nextcloud > "$dbbackup"
 
 # files
 echo "creating backup..."
 borg create \
-  --exclude "nextcloud/data/.opcache" \
-  --exclude "nextcloud/data/{access,error,nextcloud}.log" \
-  --exclude "nextcloud/data/access.log" \
-  --exclude "nextcloud/data/appdata_*/previews/*" \
-  --exclude "nextcloud/data/ncp-update-backups/" \
+  --exclude ".opcache" \
+  --exclude "{access,error,nextcloud}.log" \
+  --exclude "access.log" \
+  --exclude "appdata_*/previews/*" \
+  --exclude "ncp-update-backups/" \
   "${destdir}/${repository}::${archive}" \
-  "${basedir}" \
+  "${datadir}" \
   || {
         echo "error creating borgbackup"
         exit 1
