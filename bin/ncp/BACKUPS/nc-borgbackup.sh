@@ -5,10 +5,15 @@
 install()
 {
   echo "running install"
-  apt-get update
-  apt-get install -y --no-install-recommends borgbackup
 
-  mkdir -p /borgcache
+  # get latest stable borgbackup binary direct from borg github
+  # debian package version is too old
+  wget \
+    https://github.com/borgbackup/borg/releases/download/1.1.9/borg-linux64 \
+    -O /usr/local/bin/borg
+
+  chown ncp:ncp /usr/local/bin/borg
+  chmod +x /usr/local/bin/borg
 
   cat > /usr/local/bin/ncp-borgbackup <<'EOF'
 #!/bin/bash
@@ -32,12 +37,17 @@ trap fail INT TERM HUP ERR
 
 mkdir -p "$destdir"
 
-# initialise repository
-echo "initialising repository..."
-borg init \
-    --encryption=repokey \
-    "${destdir}/${repository}" \
-|| : # ignore any errors, perhaps the repository already exists
+# if repository path does not already exist then initialise repository
+if [[ ! -d "${destdir}/${repository}" ]]; then
+  echo "initialising repository..."
+  borg init \
+      --encryption=repokey-blake2 \
+      "${destdir}/${repository}" \
+  || {
+        echo "error initialising repository"
+        exit 1
+      }
+fi
 
 # prune older backups
 echo "pruning backups..."
@@ -58,7 +68,6 @@ mysqldump -u root --single-transaction nextcloud > "$dbbackup"
 # files
 echo "creating backup..."
 borg create \
-  --exclude "nextcloud/data/*/files/*" \
   --exclude "nextcloud/data/.opcache" \
   --exclude "nextcloud/data/{access,error,nextcloud}.log" \
   --exclude "nextcloud/data/access.log" \
@@ -77,7 +86,9 @@ $occ maintenance:mode --off
 # check
 if [[ "$checkrepo" == "yes" ]]; then
   echo "verifying repository..."
-  borg check \
+  borg --info \
+    check \
+    --verify-data \
     "${destdir}/${repository}" \
   || {
     echo "error verifying repository"
