@@ -11,25 +11,29 @@ install()
 {
   echo "running install"
 
+  # install borgbackup if not installed
   # get latest stable borgbackup binary direct from borg github
   # debian package version is too old
-  wget \
-    https://github.com/borgbackup/borg/releases/download/1.1.9/borg-linux64 \
-    -O /usr/local/bin/borg
+  borg -V >/dev/null \
+  || {
+      wget \
+      https://github.com/borgbackup/borg/releases/download/1.1.9/borg-linux64 \
+      -O /usr/local/bin/borg
 
-  chown ncp:ncp /usr/local/bin/borg
-  chmod +x /usr/local/bin/borg
+      chown ncp:ncp /usr/local/bin/borg
+      chmod +x /usr/local/bin/borg
+  }
 
   cat > /usr/local/bin/ncp-borgbackup <<'EOF'
 #!/bin/bash
 set -eE
 
-destdir="${1:-/media/USBdrive/ncp-borgbackups}"
-repository="${2:-nextcloudpi}"
+repodir="${1:-/media/USBdrive/ncp-borgbackups}"
+reponame="${2:-nextcloudpi}"
 export BORG_PASSPHRASE="${3}"
 checkrepo="${4}"
 
-prunecmd="--keep-daily=7 --keep-weekly=4 --keep-monthly=-1"
+prunecmd="--keep-within=2d --keep-last=10 --keep-daily=7 --keep-weekly=4 --keep-monthly=-1"
 archive="{hostname}-{now:%Y-%m-%dT%H:%M:%S}"
 dbbackup=nextcloud-sqlbkp_$( date +"%Y%m%d" ).bak
 occ="sudo -u www-data php /var/www/nextcloud/occ"
@@ -48,14 +52,24 @@ fail()   { local ret=$?; echo "Abort..."  ; rm -f "${dbbackup}" ; $occ maintenan
 trap cleanup EXIT
 trap fail INT TERM HUP ERR
 
-mkdir -p "$destdir"
+# assumption is that the nextcloud data directory is a subdirectory of the base directory
+[[ "$datadir" != "${basedir}/nextcloud/data" ]] && { echo "Error: nextcloud data directory is NOT a subdirectory of the base directory"; exit 1; }
+
+mkdir -p "$repodir"
+
+# if password is empty then do not encrypt the repository
+if [[ -z "$BORG_PASSPHRASE" ]]; then
+  encryption=none
+else
+  encryption=repokey-blake2
+fi
 
 # if repository path does not already exist then initialise repository
-if [[ ! -d "${destdir}/${repository}" ]]; then
-  echo "initialising repository..."
+if [[ ! -d "${repodir}/${reponame}" ]]; then
+  echo "initialising repository (encryption=${encryption})..."
   borg init \
-      --encryption=repokey-blake2 \
-      "${destdir}/${repository}" \
+      --encryption="$encryption" \
+      "${repodir}/${reponame}" \
   || {
         echo "error initialising repository"
         exit 1
@@ -66,7 +80,7 @@ fi
 echo "pruning backups..."
 borg prune \
   ${prunecmd} \
-  "${destdir}/${repository}" \
+  "${repodir}/${reponame}" \
   || {
         echo "error performing borg prune"
         exit 1
@@ -78,21 +92,20 @@ cd "$basedir" || exit 1
 echo "backup database..."
 mysqldump -u root --single-transaction nextcloud > "$dbbackup"
 
-# files
-echo "creating backup..."
+# create archive
+cd "$basedir"
+echo "creating archive..."
 borg create \
-  --exclude "${basedir}/database" \
-  --exclude "${datadir}/.opcache" \
-  --exclude "${datadir}/{access,error,nextcloud}.log" \
-  --exclude "${datadir}/access.log" \
-  --exclude "${datadir}/appdata_*/previews/*" \
-  --exclude "${datadir}/ncp-update-backups/" \
-  "${destdir}/${repository}::${archive}" \
-  "${basedir}" \
-  "${ncpdir}" \
-  "${datadir}" \
+  --exclude "database" \
+  --exclude "nextcloud/data/.opcache" \
+  --exclude "nextcloud/data/*.log" \
+  --exclude "nextcloud/data/appdata_*/previews/*" \
+  --exclude "nextcloud/data/ncp-update-backups/" \
+  "${repodir}/${reponame}::${archive}" \
+  . \
+  "$ncpdir" \
   || {
-        echo "error creating borgbackup"
+        echo "error creating archive"
         exit 1
       }
 
@@ -105,14 +118,14 @@ if [[ "$checkrepo" == "yes" ]]; then
   borg --info \
     check \
     --verify-data \
-    "${destdir}/${repository}" \
+    "${repodir}/${reponame}" \
   || {
     echo "error verifying repository"
     exit 1
   }
 fi
 
-echo "borgbackup ${destdir}/${repository} generated"
+echo "borgbackup ${repodir}/${reponame} generated"
 EOF
   chmod +x /usr/local/bin/ncp-borgbackup
 }
@@ -120,15 +133,14 @@ EOF
 configure()
 {
   echo "running configure"
-  #echo "<${DESTDIR}>, <${REPOSITORY}>, <${PASSWORD}>, <${CONFIRM}>"
-
+  
   # password validation
-  if [[ -z "$PASSWORD" ]] || [[ "$PASSWORD" != "$CONFIRM" ]]; then
+  if [[ -n "$PASSWORD" ]] && [[ "$PASSWORD" != "$CONFIRM" ]]; then
     echo "passwords do not match"
     return 1
   fi
 
-  ncp-borgbackup "$DESTDIR" "$REPOSITORY" "$PASSWORD" "$CHECKREPO"
+  ncp-borgbackup "$REPODIR" "$REPONAME" "$PASSWORD" "$CHECKREPO"
 }
 
 # License
