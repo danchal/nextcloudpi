@@ -1,5 +1,5 @@
 #!/bin/bash
-# Nextcloud borgbackups
+# Nextcloud borgbackup
 #
 # Copyleft 2017 by Ignacio Nunez Hernanz <nacho _a_t_ ownyourbits _d_o_t_ com>
 # GPL licensed (see end of file) * Use at your own risk!
@@ -9,7 +9,7 @@
 
 install()
 {
-  echo "running install"
+  echo "running borgbackup install"
 
   # install borgbackup if not installed
   # get latest stable borgbackup binary direct from borg github
@@ -135,7 +135,7 @@ EOF
 
 configure()
 {
-  echo "running configure"
+  echo "running borgbackup configure"
 
   # password validation
   if [[ -n "$PASSWORD" ]] && [[ "$PASSWORD" != "$CONFIRM" ]]; then

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Nextcloud restore borgbackup
+# Nextcloud restore-borgbackup
 #
 # Copyleft 2017 by Ignacio Nunez Hernanz <nacho _a_t_ ownyourbits _d_o_t_ com>
 # GPL licensed (see end of file) * Use at your own risk!
@@ -14,6 +14,8 @@ configure()
   set -eE
   
   PHPVER=7.2
+  
+  echo "running restore-borgbackup configure"
 
   [[ ! -d "$REPODIR" ]] && { echo "repository directory <${REPODIR}> not found"; return 1; }
   [[ -z "$REPONAME" ]] && { echo "Repository name is not set"; return 1; }
@@ -29,6 +31,7 @@ configure()
 
     # backup directory exists then reinstate it
     [[ -d "$NCBACKUPDIR" ]] && \
+      echo "restoring original nextcloud directory" && \
       rm -rf "${basedir}/nextcloud" && \
       mv "${NCBACKUPDIR}" "${basedir}/nextcloud"
     

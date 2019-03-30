@@ -1,5 +1,5 @@
 #!/bin/bash
-# Nextcloud borgbackups
+# Nextcloud borgbackups-auto
 #
 # Copyleft 2017 by Ignacio Nunez Hernanz <nacho _a_t_ ownyourbits _d_o_t_ com>
 # GPL licensed (see end of file) * Use at your own risk!
@@ -9,11 +9,14 @@
 
 install() 
 {
-  . /usr/local/bin/ncp-borgbackup && install
+  echo "running borgbackup-auto install"
+  . /usr/local/bin/ncp/BACKUPS/nc-borgbackup.sh && install
 }
 
 configure()
 {
+  echo "running borgbackup-auto configure"
+
   [[ $ACTIVE != "yes" ]] && {
     rm -f /etc/cron.d/ncp-borgbackup-auto
     service cron restart
