@@ -29,7 +29,7 @@ install()
 set -eE
 
 repodir="${1}"
-reponame="${2:-nextcloudpi}"
+reponame="${2}"
 export BORG_PASSPHRASE="${3}"
 checkrepo="${4}"
 
