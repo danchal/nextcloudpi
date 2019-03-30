@@ -16,9 +16,6 @@ configure()
   PHPVER=7.2
 
   #TESTING ONLY
-  RESTOREDATA=${RESTOREDATA:-"no"}
-  RESTOREDB=${RESTOREDB:-"no"}
-  RESTORENC=${RESTORENC:-"no"}
   RESTORENCP=${RESTORENCP:-"no"}
 
   REPODIR=${REPODIR:-"/media/USBdrive/ncp-borgbackups"}
@@ -33,13 +30,15 @@ configure()
 
   cleanup(){ local ret=$?;                    rm -rf "${ARCHDIR}" ; $occ maintenance:mode --off; exit $ret; }
   fail(){
-     local ret=$?
-     echo "Abort..."
-     rm -rf "${ARCHDIR}"
+    local ret=$?
+    echo "Abort..."
+    rm -rf "${ARCHDIR}"
 
-     
-     $occ maintenance:mode --off
-     exit $ret
+    # backup directory exists then reinstate it
+    [[ -d "$NCBACKUPDIR" ]] && rm -rf "${basedir}/nextcloud" && mv "${NCBACKUPDIR}" "${basedir}/nextcloud"
+    
+    $occ maintenance:mode --off
+    exit $ret
   }
 
   trap cleanup EXIT
@@ -66,19 +65,12 @@ configure()
   rm -rf "$ARCHDIR" && mkdir -p "$ARCHDIR"
   
   NCBACKUPDIR="${basedir}/nextcloud-$(date "+%s")"
-  mkdir "$NCBACKUPDIR"
-
-  # exclude the data files if we are not restoring them in order to save space
-  if [[ "$RESTOREDATA" != "yes" ]]; then
-      excludedata="nextcloud/data"
-  fi
 
   ## EXTRACT ARCHIVE
   cd "$ARCHDIR"
 
   echo "extracting archive ..."
   borg extract \
-    --exclude "${excludedata}" \
     "${REPODIR}/${REPONAME}::${ARCHIVE}" \
     || {
           echo "error extracting archive"
@@ -97,40 +89,17 @@ configure()
   # verify that the archive data directory is readable
   [[ -z "$ARCHDATADIR" ]] && { echo "Error reading archive data directory"; exit 1; }
 
-  # verify that the archive data directory exists
-
   ## BEGIN RESTORE
   # turn on maintenance mode
   $occ maintenance:mode --on
 
-  # move all the original files
-  # split the data directory from the nextcloud directory to allow independant restoration
-  echo "moving original files..."
-  mv "${basedir}/nextcloud" "${NCBACKUPDIR}/nextcloud" || { echo "Error moving original nextcloud files"; exit 1; }
-  mv "${NCBACKUPDIR}/nextcloud/data" "${NCBACKUPDIR}/data" || { echo "Error moving original data files"; exit 1; }
-  
-  # move the archive data files out of the nextcloud directory to allow independant restoration
-  mv "${ARCHDIR}/nextcloud/data" "${ARCHDIR}/data"
-
-  # restoring nc
+  # rename the original nextcloud directory 
+  echo "renameing original nextcloud directory..."
+  mv "${basedir}/nextcloud" "${NCBACKUPDIR}" || { echo "Error moving original nextcloud files"; exit 1; }
+    
+  # restoring all files
   echo "restoring nc..."
-  if [[ "$RESTORENC" == "yes" ]]; then
-    # move restored archive nc files into base directory
-    mv "${ARCHDIR}/nextcloud" "${basedir}" || { echo "Error restoring old nextcloud files"; exit 1; }
-  else
-    # copy original nc files back into base directory
-    cp -r "${NCBACKUPDIR}/nextcloud" "${basedir}" || { echo "Error restoring old nextcloud files"; exit 1; }
-  fi
-
-  # restoring data files
-  echo "restoring data..."
-  if [[ "$RESTOREDATA" == "yes" ]]; then
-    # move restored archive data files into base directory
-    mv "${ARCHDIR}/nextcloud/data" "${basedir}/nextcloud" || { echo "Error restoring old data files"; exit 1; }
-  else
-    # copy original data files back into base directory
-    cp -r "${NCBACKUPDIR}/data" "${basedir}/nextcloud" || { echo "Error restoring current data files"; exit 1; }
-  fi
+  mv "${ARCHDIR}/nextcloud" "${basedir}" || { echo "Error restoring old nextcloud files"; exit 1; }
 
   # restoring ncp
   if [[ "$RESTORENCP" == "yes" ]]; then
@@ -143,23 +112,21 @@ configure()
   fi
   
   # DB
-  if [[ "$RESTOREDB" == "yes" ]]; then
-    echo "restoring db..."
-    DBADMIN=ncadmin
-    DBPASSWD="$( grep password /root/.my.cnf | sed 's|password=||' )"
+  echo "restoring db..."
+  DBADMIN=ncadmin
+  DBPASSWD="$( grep password /root/.my.cnf | sed 's|password=||' )"
 
-    # update NC database password to this instance
-    sed -i "s|'dbpassword' =>.*|'dbpassword' => '$DBPASSWD',|" /var/www/nextcloud/config/config.php
+  # update NC database password to this instance
+  sed -i "s|'dbpassword' =>.*|'dbpassword' => '$DBPASSWD',|" /var/www/nextcloud/config/config.php
 
-    # update redis credentials
-    REDISPASS="$( grep "^requirepass" /etc/redis/redis.conf | cut -f2 -d' ' )"
-    [[ "$REDISPASS" != "" ]] && \
-      sed -i "s|'password'.*|'password' => '$REDISPASS',|" /var/www/nextcloud/config/config.php
-    service redis-server restart
+  # update redis credentials
+  REDISPASS="$( grep "^requirepass" /etc/redis/redis.conf | cut -f2 -d' ' )"
+  [[ "$REDISPASS" != "" ]] && \
+    sed -i "s|'password'.*|'password' => '$REDISPASS',|" /var/www/nextcloud/config/config.php
+  service redis-server restart
 
-    ## RE-CREATE DATABASE TABLE
-
-    echo "restore database..."
+  ## RE-CREATE DATABASE TABLE
+  echo "restore database..."
 mysql -u root <<EOFMYSQL
 DROP DATABASE IF EXISTS nextcloud;
 CREATE DATABASE nextcloud;
@@ -171,9 +138,7 @@ EXIT
 EOFMYSQL
 [ $? -ne 0 ] && { echo "Error configuring nextcloud database"; exit 1; }
 
-    mysql -u root nextcloud <  "$ARCHDIR"/nextcloud-sqlbkp_*.bak || { echo "Error restoring nextcloud database"; exit 1; }
-
-  fi
+  mysql -u root nextcloud <  "$ARCHDIR"/nextcloud-sqlbkp_*.bak || { echo "Error restoring nextcloud database"; exit 1; }
 
   # turn off maintenance mode
   $occ maintenance:mode --off
