@@ -15,30 +15,25 @@ configure()
   
   PHPVER=7.2
 
-  #TESTING ONLY
-  RESTORENCP=${RESTORENCP:-"no"}
-
-  REPODIR=${REPODIR:-"/media/USBdrive/ncp-borgbackups"}
-  REPONAME=${REPONAME:-"nextcloudpi"}
-  #TESTING ONLY
-
-  [[ ! -d "$REPODIR" ]] && { echo "repository directory <${REPODIR}> not found"; exit 1; }
-  [[ -z "$REPONAME" ]] && { echo "Repository name is not set"; exit 1; }
-  [[ -z "$ARCHIVE" ]] && { echo "Archive name is not set"; exit 1; }
+  [[ ! -d "$REPODIR" ]] && { echo "repository directory <${REPODIR}> not found"; return 1; }
+  [[ -z "$REPONAME" ]] && { echo "Repository name is not set"; return 1; }
+  [[ -z "$ARCHIVE" ]] && { echo "Archive name is not set"; return 1; }
 
   export BORG_PASSPHRASE="${PASSWORD}"
 
-  cleanup(){ local ret=$?;                    rm -rf "${ARCHDIR}" ; $occ maintenance:mode --off; exit $ret; }
+  cleanup(){ local ret=$?; rm -rf "${ARCHDIR}" ; $occ maintenance:mode --off; return $ret; }
   fail(){
     local ret=$?
     echo "Abort..."
     rm -rf "${ARCHDIR}"
 
     # backup directory exists then reinstate it
-    [[ -d "$NCBACKUPDIR" ]] && rm -rf "${basedir}/nextcloud" && mv "${NCBACKUPDIR}" "${basedir}/nextcloud"
+    [[ -d "$NCBACKUPDIR" ]] && \
+      rm -rf "${basedir}/nextcloud" && \
+      mv "${NCBACKUPDIR}" "${basedir}/nextcloud"
     
     $occ maintenance:mode --off
-    exit $ret
+    return $ret
   }
 
   trap cleanup EXIT
@@ -50,18 +45,18 @@ configure()
 
   datadir=$( $occ config:system:get datadirectory ) || {
     echo "Error reading data directory. Is NextCloud running and configured?";
-    exit 1;
+    return 1;
   }
 
   echo "datadir<${datadir}>, basedir<${basedir}>"
 
   # assumption is that the nextcloud data directory is a subdirectory of the base directory
-  [[ "$datadir" != "${basedir}/nextcloud/data" ]] && { echo "Error: nextcloud data directory is NOT a subdirectory of the base directory"; exit 1; }
+  [[ "$datadir" != "${basedir}/nextcloud/data" ]] && { echo "Error: nextcloud data directory is NOT a subdirectory of the base directory"; return 1; }
 
   ncpdir="/usr/local/etc/ncp-config.d"
 
-  ARCHDIR="$( mktemp -d "${basedir}/ncp-restore-borg.XXXXXX" )" || { echo "Failed to create temp dir" >&2; exit 1; }
-  ARCHDIR="$( cd "$ARCHDIR" &>/dev/null && pwd )" || { echo "$ARCHDIR not found"; exit 1; } #abspath
+  ARCHDIR="$( mktemp -d "${basedir}/ncp-restore-borg.XXXXXX" )" || { echo "Failed to create temp dir" >&2; return 1; }
+  ARCHDIR="$( cd "$ARCHDIR" &>/dev/null && pwd )" || { echo "$ARCHDIR not found"; return 1; } #abspath
   rm -rf "$ARCHDIR" && mkdir -p "$ARCHDIR"
   
   NCBACKUPDIR="${basedir}/nextcloud-$(date "+%s")"
@@ -74,20 +69,20 @@ configure()
     "${REPODIR}/${REPONAME}::${ARCHIVE}" \
     || {
           echo "error extracting archive"
-          exit 1
+          return 1
         }
 
   ## SANITY CHECKS
   [[ -d "${ARCHDIR}/nextcloud" ]] && [[ -f "$( ls "${ARCHDIR}"/nextcloud-sqlbkp_*.bak 2>/dev/null )" ]] || {
     echo "invalid backup file. Abort"
-    exit 1
+    return 1
   }
 
   # get the data directory of the archive
   ARCHDATADIR=$( grep datadirectory "${ARCHDIR}/nextcloud/config/config.php" | awk '{ print $3 }' | grep -oP "[^']*[^']" | head -1 )
   
   # verify that the archive data directory is readable
-  [[ -z "$ARCHDATADIR" ]] && { echo "Error reading archive data directory"; exit 1; }
+  [[ -z "$ARCHDATADIR" ]] && { echo "Error reading archive data directory"; return 1; }
 
   ## BEGIN RESTORE
   # turn on maintenance mode
@@ -95,20 +90,20 @@ configure()
 
   # rename the original nextcloud directory 
   echo "renameing original nextcloud directory..."
-  mv "${basedir}/nextcloud" "${NCBACKUPDIR}" || { echo "Error moving original nextcloud files"; exit 1; }
+  mv "${basedir}/nextcloud" "${NCBACKUPDIR}" || { echo "Error moving original nextcloud files"; return 1; }
     
   # restoring all files
   echo "restoring nc..."
-  mv "${ARCHDIR}/nextcloud" "${basedir}" || { echo "Error restoring old nextcloud files"; exit 1; }
+  mv "${ARCHDIR}/nextcloud" "${basedir}" || { echo "Error restoring old nextcloud files"; return 1; }
 
   # restoring ncp
   if [[ "$RESTORENCP" == "yes" ]]; then
     echo "restoring ncp..."
     # move original files to tmp directory
-    mv "${ncpdir}/*" "${NCBACKUPDIR}/ncp" || { echo "Error moving current ncp files"; exit 1; }
+    mv "${ncpdir}/*" "${NCBACKUPDIR}/ncp" || { echo "Error moving current ncp files"; return 1; }
     
     # move restored ncp files into base directory
-    mv "${ARCHDIR}${ncpdir}/*" "${ncpdir}" || { echo "Error restoring old ncp files"; exit 1; }
+    mv "${ARCHDIR}${ncpdir}/*" "${ncpdir}" || { echo "Error restoring old ncp files"; return 1; }
   fi
   
   # DB
@@ -136,9 +131,9 @@ CREATE USER '$DBADMIN'@'localhost' IDENTIFIED BY '$DBPASSWD';
 GRANT ALL PRIVILEGES ON nextcloud.* TO $DBADMIN@localhost;
 EXIT
 EOFMYSQL
-[ $? -ne 0 ] && { echo "Error configuring nextcloud database"; exit 1; }
+[ $? -ne 0 ] && { echo "Error configuring nextcloud database"; return 1; }
 
-  mysql -u root nextcloud <  "$ARCHDIR"/nextcloud-sqlbkp_*.bak || { echo "Error restoring nextcloud database"; exit 1; }
+  mysql -u root nextcloud <  "$ARCHDIR"/nextcloud-sqlbkp_*.bak || { echo "Error restoring nextcloud database"; return 1; }
 
   # turn off maintenance mode
   $occ maintenance:mode --off

@@ -28,10 +28,13 @@ install()
 #!/bin/bash
 set -eE
 
-repodir="${1:-/media/USBdrive/ncp-borgbackups}"
+repodir="${1}"
 reponame="${2:-nextcloudpi}"
 export BORG_PASSPHRASE="${3}"
 checkrepo="${4}"
+
+[[ ! -d "$repodir" ]] && { echo "repository directory <${repodir}> not found"; exit 1; }
+[[ -z "$reponame" ]] && { echo "Repository name is not set"; exit 1; }
 
 prunecmd="--keep-within=2d --keep-last=10 --keep-daily=7 --keep-weekly=4 --keep-monthly=-1"
 archive="{hostname}-{now:%Y-%m-%dT%H:%M:%S}"
@@ -133,7 +136,7 @@ EOF
 configure()
 {
   echo "running configure"
-  
+
   # password validation
   if [[ -n "$PASSWORD" ]] && [[ "$PASSWORD" != "$CONFIRM" ]]; then
     echo "passwords do not match"

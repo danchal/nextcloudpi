@@ -7,6 +7,11 @@
 # More at https://ownyourbits.com/2017/02/13/nextcloud-ready-raspberry-pi-image/
 #
 
+install() 
+{
+  . /usr/local/bin/ncp-borgbackup && install
+}
+
 configure()
 {
   [[ $ACTIVE != "yes" ]] && {
@@ -15,6 +20,9 @@ configure()
     echo "automatic borgbackups disabled"
     return 0
   }
+
+  [[ ! -d "$REPODIR" ]] && { echo "repository directory <${REPODIR}> not found"; return 1; }
+  [[ -z "$REPONAME" ]] && { echo "Repository name is not set"; return 1; }
 
   # password validation
   if [[ -n "$PASSWORD" ]] && [[ "$PASSWORD" != "$CONFIRM" ]]; then
@@ -36,8 +44,6 @@ EOF
 
   echo "automatic borgbackups enabled"
 }
-
-install() { :; }
 
 # License
 #
