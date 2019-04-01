@@ -169,11 +169,11 @@ EOFMYSQL
   bash /usr/local/bin/nextcloud-domain.sh
 
   # update the systems data-fingerprint
-  sudo -u www-data php occ maintenance:data-fingerprint
-
+  $occ maintenance:data-fingerprint
+  
   # refresh thumbnails
-  sudo -u www-data php occ files:scan-app-data
-
+  $occ files:scan-app-data
+  
   # restart PHP if needed
   [[ "$NEED_RESTART" == "1" ]] && \
     bash -c " sleep 3; service php${PHPVER}-fpm restart" &>/dev/null &
