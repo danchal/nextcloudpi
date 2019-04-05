@@ -6,12 +6,6 @@
 #
 # More at https://ownyourbits.com/2017/02/13/nextcloud-ready-raspberry-pi-image/
 #
-
-install() 
-{
-  . /usr/local/bin/ncp/BACKUPS/nc-borgbackup.sh && install
-}
-
 configure()
 {
     [[ $ACTIVE != "yes" ]] && {
@@ -44,6 +38,8 @@ EOF
 
   echo "automatic borgbackups enabled"
 }
+
+install() { :; }
 
 # License
 #

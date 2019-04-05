@@ -231,6 +231,9 @@ EOF
   # update nc-backup
   install_app nc-backup
 
+  # update nc-borgbackup
+  install_app nc-borgbackup
+
   # create UPDATES section
   updates_dir=/usr/local/bin/ncp/UPDATES
   mkdir -p "$updates_dir"
