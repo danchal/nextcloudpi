@@ -12,21 +12,30 @@ install()
   echo "running borgbackup install"
 
   # install borgbackup if not installed
-  # get latest stable borgbackup binary direct from borg github
-  # debian package version is too old
   borg -V >/dev/null \
   || {
-      wget \
-      https://github.com/borgbackup/borg/releases/download/1.1.9/borg-linux64 \
-      -O /usr/local/bin/borg
+      # Debian package version is quite old
+      # if using x86_64 then get latest stable borgbackup binary direct from borg github
 
-      chown ncp:ncp /usr/local/bin/borg
-      chmod +x /usr/local/bin/borg
+      if [[ $(arch) == "x86_64" ]]; then
+        wget \
+        https://github.com/borgbackup/borg/releases/download/1.1.9/borg-linux64 \
+        -O /usr/local/bin/borg
+
+        chown root:root /usr/local/bin/borg
+        chmod 755 /usr/local/bin/borg
+
+      else
+        # use older packaged version
+        apt-get install borgbackup
+      fi
   }
 
   cat > /usr/local/bin/ncp-borgbackup <<'EOF'
 #!/bin/bash
 set -eE
+
+echo "Starting ${0}..."
 
 repodir="${1}"
 reponame="${2}"
@@ -36,7 +45,7 @@ checkrepo="${4}"
 [[ ! -d "$repodir" ]] && { echo "repository directory <${repodir}> not found"; exit 1; }
 [[ -z "$reponame" ]] && { echo "Repository name is not set"; exit 1; }
 
-prunecmd="--keep-within=2d --keep-last=10 --keep-daily=7 --keep-weekly=4 --keep-monthly=-1"
+prunecmd="--keep-within=2d --keep-daily=7 --keep-weekly=4 --keep-monthly=-1"
 archive="{hostname}-{now:%Y-%m-%dT%H:%M:%S}"
 dbbackup=nextcloud-sqlbkp_$( date +"%Y%m%d" ).bak
 occ="sudo -u www-data php /var/www/nextcloud/occ"
@@ -70,24 +79,28 @@ fi
 # if repository path does not already exist then initialise repository
 if [[ ! -d "${repodir}/${reponame}" ]]; then
   echo "initialising repository (encryption=${encryption})..."
-  borg init \
-      --encryption="$encryption" \
-      "${repodir}/${reponame}" \
+  cmd_output=$( \
+      /usr/local/bin/borg init \
+        --encryption="$encryption" \
+        "${repodir}/${reponame}" \
+      2>&1 ) \
   || {
-        echo "error initialising repository"
+        echo "error initialising repository: ${cmd_output}"
         exit 1
       }
 fi
 
 # prune older backups
 echo "pruning backups..."
-borg prune \
-  ${prunecmd} \
-  "${repodir}/${reponame}" \
-  || {
-        echo "error performing borg prune"
-        exit 1
-      }
+cmd_output=$( \
+  /usr/local/bin/borg prune \
+    ${prunecmd} \
+    "${repodir}/${reponame}" \
+  2>&1 ) \
+|| {
+      echo "error performing borg prune: ${cmd_output}"
+      exit 1
+    }
 
 # database
 $occ maintenance:mode --on
@@ -98,19 +111,21 @@ mysqldump -u root --single-transaction nextcloud > "$dbbackup"
 # create archive
 cd "$basedir"
 echo "creating archive..."
-borg create \
-  --exclude "database" \
-  --exclude "nextcloud/data/.opcache" \
-  --exclude "nextcloud/data/*.log" \
-  --exclude "nextcloud/data/appdata_*/previews/*" \
-  --exclude "nextcloud/data/ncp-update-backups/" \
-  "${repodir}/${reponame}::${archive}" \
-  . \
-  "$ncpdir" \
-  || {
-        echo "error creating archive"
-        exit 1
-      }
+cmd_output=$( \
+  /usr/local/bin/borg create \
+    --exclude "database" \
+    --exclude "nextcloud/data/.opcache" \
+    --exclude "nextcloud/data/*.log" \
+    --exclude "nextcloud/data/appdata_*/previews/*" \
+    --exclude "nextcloud/data/ncp-update-backups/" \
+    "${repodir}/${reponame}::${archive}" \
+    . \
+    "$ncpdir" \
+  2>&1 ) \
+|| {
+      echo "error creating archive: ${cmd_output}"
+      exit 1
+    }
 
 # turn off maintenance mode as repository check could take some time
 $occ maintenance:mode --off
@@ -118,12 +133,14 @@ $occ maintenance:mode --off
 # check
 if [[ "$checkrepo" == "yes" ]]; then
   echo "verifying repository..."
-  borg --info \
-    check \
-    --verify-data \
-    "${repodir}/${reponame}" \
+  cmd_output=$( \
+    /usr/local/bin/borg --info \
+      check \
+      --verify-data \
+      "${repodir}/${reponame}" \
+    2>&1 ) \
   || {
-    echo "error verifying repository"
+    echo "error verifying repository: ${cmd_output}"
     exit 1
   }
 fi

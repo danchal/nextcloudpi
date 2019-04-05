@@ -41,7 +41,7 @@ configure()
 EOF
   chmod +x /usr/local/bin/ncp-borgbackup-auto
 
-  echo "0  3  */${BACKUPDAYS}  *  *  root  /usr/local/bin/ncp-borgbackup-auto" > /etc/cron.d/ncp-borgbackup-auto
+  echo "0  3  */${BACKUPDAYS}  *  *  root  /usr/local/bin/ncp-borgbackup-auto 2>&1 >>/var/log/ncp.log" > /etc/cron.d/ncp-borgbackup-auto
   chmod 644 /etc/cron.d/ncp-borgbackup-auto
   service cron restart
 
