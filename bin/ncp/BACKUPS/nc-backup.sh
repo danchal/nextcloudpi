@@ -38,13 +38,17 @@ fail()   { local ret=$?; echo "Abort..."  ; rm -f "${dbbackup}" "${destfile}"; $
 trap cleanup EXIT
 trap fail INT TERM HUP ERR
 
-echo "check free space..." # allow at least ~100 extra MiB
+echo "check free space..." # allow at least ~500 extra MiB
 mkdir -p "$destdir"
-[[ "$includedata" == "yes" ]] && \
-  dsize=$(du -s "$datadir" | awk '{ print $1 }')
-nsize=$(du -s "$basedir/nextcloud" | awk '{ print $1 }')
-size=$((nsize + dsize + 100*1024))
-free=$( df "$destdir" | tail -1 | awk '{ print $4 }' )
+dsize=$(du -sb "$datadir" | awk '{ print $1 }')
+nsize=$(du -sb "$basedir/nextcloud" | awk '{ print $1 }')
+margin=$((500*1024*1024))                  # safety margin for database and some extra
+if [[ "$includedata" == "yes" ]]; then
+  size=$((nsize + margin))
+else                                       #datadir is inside $basedir/nextcloud therefore substract
+  size=$((nsize - dsize + margin))
+fi
+free=$( df -B1 "$destdir" | tail -1 | awk '{ print $4 }' )
 
 [ $size -ge $free ] && {
   echo "free space check failed. Need $size Bytes";
