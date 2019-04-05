@@ -36,7 +36,7 @@ configure()
     exit 0
   fi
 
-  cleanup(){ local ret=$?; rm -rf "${ARCHDIR}" ; $occ maintenance:mode --off; return $ret; }
+  cleanup(){ local ret=$?; rm -rf "${ARCHDIR}" ; ncc maintenance:mode --off; return $ret; }
   fail(){
     local ret=$?
     echo "Abort..."
@@ -48,7 +48,7 @@ configure()
       rm -rf "${basedir}/nextcloud" && \
       mv "${NCBACKUPDIR}" "${basedir}/nextcloud"
     
-    $occ maintenance:mode --off
+    ncc maintenance:mode --off
     return $ret
   }
 
@@ -57,9 +57,7 @@ configure()
 
   [[ -f /.docker-image ]] && basedir=/data || basedir=/var/www
 
-  occ="sudo -u www-data php /var/www/nextcloud/occ"
-
-  datadir=$( $occ config:system:get datadirectory ) || {
+  datadir=$( ncc config:system:get datadirectory ) || {
     echo "Error reading data directory. Is NextCloud running and configured?";
     return 1;
   }
@@ -100,7 +98,7 @@ configure()
 
   ## BEGIN RESTORE
   # turn on maintenance mode
-  $occ maintenance:mode --on
+  ncc maintenance:mode --on
 
   # rename the original nextcloud directory 
   echo "renameing original nextcloud directory..."
@@ -150,11 +148,11 @@ EOFMYSQL
   mysql -u root nextcloud <  "$ARCHDIR"/nextcloud-sqlbkp_*.bak || { echo "Error restoring nextcloud database"; return 1; }
 
   # turn off maintenance mode
-  $occ maintenance:mode --off
+  ncc maintenance:mode --off
 
   # rescan files if db and files are not both restored together
   if [[ "$RESTOREDB" != "$RESTOREDATA" ]]; then
-    $occ files:scan --all
+    ncc files:scan --all
 
     # cache needs to be cleaned as of NC 12
     NEED_RESTART=1
@@ -180,10 +178,10 @@ EOFMYSQL
   bash /usr/local/bin/nextcloud-domain.sh
 
   # update the systems data-fingerprint
-  $occ maintenance:data-fingerprint
+  ncc maintenance:data-fingerprint
   
   # refresh thumbnails
-  $occ files:scan-app-data
+  ncc files:scan-app-data
   
   # restart PHP if needed
   [[ "$NEED_RESTART" == "1" ]] && \

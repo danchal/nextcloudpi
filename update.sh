@@ -212,6 +212,7 @@ EOF
 
   # fix cron path
   is_active_app nc-backup-auto && run_app nc-backup-auto
+  is_active_app nc-borgbackup-auto && run_app nc-borgbackup-auto
   is_active_app nc-scan-auto && run_app nc-scan-auto
   is_active_app nc-autoupdate-ncp && run_app nc-autoupdate-ncp
   is_active_app nc-notify-updates && run_app nc-notify-updates

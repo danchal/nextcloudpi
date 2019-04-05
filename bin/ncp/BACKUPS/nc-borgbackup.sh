@@ -31,21 +31,18 @@ checkrepo="${4}"
 prunecmd="--keep-within=2d --keep-daily=7 --keep-weekly=4 --keep-monthly=-1"
 archive="{hostname}-{now:%Y-%m-%dT%H:%M:%S}"
 dbbackup=nextcloud-sqlbkp_$( date +"%Y%m%d" ).bak
-occ="sudo -u www-data php /var/www/nextcloud/occ"
 
 [[ -f /.docker-image ]] && basedir=/data || basedir=/var/www
 
-datadir=$( $occ config:system:get datadirectory ) || {
+datadir=$( ncc config:system:get datadirectory ) || {
   echo "Error reading data directory. Is NextCloud running and configured?";
   exit 1;
 }
 
-BORG_VERSION="$(borg -V)"
-
 ncpdir="/usr/local/etc/ncp-config.d"
 
-cleanup(){ local ret=$?;                    rm -f "${dbbackup}" ; $occ maintenance:mode --off; exit $ret; }
-fail()   { local ret=$?; echo "Abort..."  ; rm -f "${dbbackup}" ; $occ maintenance:mode --off; exit $ret; }
+cleanup(){ local ret=$?;                    rm -f "${dbbackup}" ; ncc maintenance:mode --off; exit $ret; }
+fail()   { local ret=$?; echo "Abort..."  ; rm -f "${dbbackup}" ; ncc maintenance:mode --off; exit $ret; }
 trap cleanup EXIT
 trap fail INT TERM HUP ERR
 
@@ -88,7 +85,7 @@ cmd_output=$( \
     }
 
 # database
-$occ maintenance:mode --on
+ncc maintenance:mode --on
 cd "$basedir" || exit 1
 echo "backup database..."
 mysqldump -u root --single-transaction nextcloud > "$dbbackup"
@@ -113,7 +110,7 @@ cmd_output=$( \
     }
 
 # turn off maintenance mode as repository check could take some time
-$occ maintenance:mode --off
+ncc maintenance:mode --off
 
 # check
 if [[ "$checkrepo" == "yes" ]]; then
