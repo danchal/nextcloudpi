@@ -17,11 +17,28 @@ configure()
   
   echo "running restore-borgbackup configure"
 
+  export BORG_PASSPHRASE="${PASSWORD}"
+
   [[ ! -d "$REPODIR" ]] && { echo "repository directory <${REPODIR}> not found"; return 1; }
   [[ -z "$REPONAME" ]] && { echo "Repository name is not set"; return 1; }
-  [[ -z "$ARCHIVE" ]] && { echo "Archive name is not set"; return 1; }
+  #[[ -z "$ARCHIVE" ]] && { echo "Archive name is not set"; return 1; }
 
-  export BORG_PASSPHRASE="${PASSWORD}"
+  if [[ -z "$ARCHIVE" ]]; then
+    # archive name not given, attempt to list all available archives
+    echo "Available archives:"
+    cmd_output=$( \
+      /usr/local/bin/borg list \
+        --short \
+        "${REPODIR}/${REPONAME}" \
+      2>&1 ) \
+    || {
+          echo "error listing repository archives: ${cmd_output}"
+          exit 1
+      }
+
+    echo "${cmd_output}"
+    exit 0
+  fi
 
   cleanup(){ local ret=$?; rm -rf "${ARCHDIR}" ; $occ maintenance:mode --off; return $ret; }
   fail(){
