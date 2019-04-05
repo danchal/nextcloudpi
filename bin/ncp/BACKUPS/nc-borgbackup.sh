@@ -12,24 +12,7 @@ install()
   echo "running borgbackup install"
 
   # install borgbackup if not installed
-  borg -V >/dev/null \
-  || {
-      # Debian package version is quite old
-      # if using x86_64 then get latest stable borgbackup binary direct from borg github
-
-      if [[ $(arch) == "x86_64" ]]; then
-        wget \
-        https://github.com/borgbackup/borg/releases/download/1.1.9/borg-linux64 \
-        -O /usr/local/bin/borg
-
-        chown root:root /usr/local/bin/borg
-        chmod 755 /usr/local/bin/borg
-
-      else
-        # use older packaged version
-        apt-get install borgbackup
-      fi
-  }
+  borg -V >/dev/null || apt-get install borgbackup
 
   cat > /usr/local/bin/ncp-borgbackup <<'EOF'
 #!/bin/bash
@@ -57,6 +40,8 @@ datadir=$( $occ config:system:get datadirectory ) || {
   exit 1;
 }
 
+BORG_VERSION="$(borg -V)"
+
 ncpdir="/usr/local/etc/ncp-config.d"
 
 cleanup(){ local ret=$?;                    rm -f "${dbbackup}" ; $occ maintenance:mode --off; exit $ret; }
@@ -73,14 +58,14 @@ mkdir -p "$repodir"
 if [[ -z "$BORG_PASSPHRASE" ]]; then
   encryption=none
 else
-  encryption=repokey-blake2
+  encryption=repokey
 fi
 
 # if repository path does not already exist then initialise repository
 if [[ ! -d "${repodir}/${reponame}" ]]; then
   echo "initialising repository (encryption=${encryption})..."
   cmd_output=$( \
-      /usr/local/bin/borg init \
+      borg init \
         --encryption="$encryption" \
         "${repodir}/${reponame}" \
       2>&1 ) \
@@ -93,7 +78,7 @@ fi
 # prune older backups
 echo "pruning backups..."
 cmd_output=$( \
-  /usr/local/bin/borg prune \
+  borg prune \
     ${prunecmd} \
     "${repodir}/${reponame}" \
   2>&1 ) \
@@ -112,7 +97,7 @@ mysqldump -u root --single-transaction nextcloud > "$dbbackup"
 cd "$basedir"
 echo "creating archive..."
 cmd_output=$( \
-  /usr/local/bin/borg create \
+  borg create \
     --exclude "database" \
     --exclude "nextcloud/data/.opcache" \
     --exclude "nextcloud/data/*.log" \
@@ -134,9 +119,8 @@ $occ maintenance:mode --off
 if [[ "$checkrepo" == "yes" ]]; then
   echo "verifying repository..."
   cmd_output=$( \
-    /usr/local/bin/borg --info \
+    borg --info \
       check \
-      --verify-data \
       "${repodir}/${reponame}" \
     2>&1 ) \
   || {

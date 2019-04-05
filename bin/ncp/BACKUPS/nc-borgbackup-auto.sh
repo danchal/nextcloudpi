@@ -9,15 +9,12 @@
 
 install() 
 {
-  echo "running borgbackup-auto install"
   . /usr/local/bin/ncp/BACKUPS/nc-borgbackup.sh && install
 }
 
 configure()
 {
-  echo "running borgbackup-auto configure"
-
-  [[ $ACTIVE != "yes" ]] && {
+    [[ $ACTIVE != "yes" ]] && {
     rm -f /etc/cron.d/ncp-borgbackup-auto
     service cron restart
     echo "automatic borgbackups disabled"

@@ -14,20 +14,16 @@ configure()
   set -eE
   
   PHPVER=7.2
-  
-  echo "running restore-borgbackup configure"
-
   export BORG_PASSPHRASE="${PASSWORD}"
 
   [[ ! -d "$REPODIR" ]] && { echo "repository directory <${REPODIR}> not found"; return 1; }
   [[ -z "$REPONAME" ]] && { echo "Repository name is not set"; return 1; }
-  #[[ -z "$ARCHIVE" ]] && { echo "Archive name is not set"; return 1; }
 
   if [[ -z "$ARCHIVE" ]]; then
     # archive name not given, attempt to list all available archives
     echo "Available archives:"
     cmd_output=$( \
-      /usr/local/bin/borg list \
+      borg list \
         --short \
         "${REPODIR}/${REPONAME}" \
       2>&1 ) \
@@ -67,8 +63,6 @@ configure()
     echo "Error reading data directory. Is NextCloud running and configured?";
     return 1;
   }
-
-  echo "datadir<${datadir}>, basedir<${basedir}>"
 
   # assumption is that the nextcloud data directory is a subdirectory of the base directory
   [[ "$datadir" != "${basedir}/nextcloud/data" ]] && { echo "Error: nextcloud data directory is NOT a subdirectory of the base directory"; return 1; }
